@@ -1,0 +1,87 @@
+# Variables:
+#   - {pd::<uuid>::seismicCharge::loc}
+
+options:
+    fusionTime: 33 # Time the shrinking effect takes in ticks
+    volume: 7 # How many times will it play the sound effect on volume 2
+    soundRadiusBonus: 8 # What range the players will hear it outside the explosion radius
+    explosionQuality: 5 # How many rings will be drawn each block
+
+
+function SeismicChargeA(p: player):
+    Blowup({_p}, {_p}'s location, 30, 30)
+
+
+function SeismicChargeB(p: player):
+    set {_fuseTime} to 5 seconds
+    set {_radius} to 30
+    set {_dmg} to 30
+    set {_loc} to {_p}'s location
+    ShowBomb({_p}, {_loc}, {_fuseTime}, {_radius}, {_dmg})
+    wait {_fuseTime}
+    Blowup({_p}, {_loc}, {_radius}, {_dmg})
+
+function SeismicChargeC(p: player):
+    if {pd::%{_p}'s uuid%::seismicCharge::loc} is set:
+        Blowup({_p}, {pd::%{_p}'s uuid%::seismicCharge::loc}, 30, 30)
+        loop all entities in radius 3 around {pd::%{_p}'s uuid%::seismicCharge::loc}:
+            if loop-entity is an item frame:
+                set {_i} to item of loop-entity
+                if item model of {_i} is "minecraft:seismiccharge":
+                    kill loop-entity
+            else if loop-entity is a text display:
+                if text of loop-entity contains "&b&lSeismic Charge" or " seconds till explosion":
+                    kill loop-entity
+        delete {pd::%{_p}'s uuid%::seismicCharge::loc}
+    else:
+        ShowBomb({_p}, {_p}'s location, 30 seconds, 30, 30)
+        set {pd::%{_p}'s uuid%::seismicCharge::loc} to {_p}'s location
+
+
+
+local function Blowup(p: player, loc: location, radius: number, dmg: number):
+    set {_loc} to location above {_loc}
+    loop {@volume} times:
+        loop all players in radius ({_radius} + {@soundRadiusBonus}) around {_loc}:
+            play sound "entity.warden.sonic_charge" with volume 2 at pitch 0.9 to loop-player
+    wait 3 ticks
+    loop {@fusionTime} times:
+        set {_fusionRadius} to 1 - (loop-iteration / {@fusionTime})
+        sphere({_fusionRadius} * 2, {_loc}, dust_color_transition, dustTransition(light blue, cyan, 0.5), {_fusionRadius} * 90)
+        wait 1 tick
+    loop 40 times:
+        stop all sounds for all players in radius ({_radius} + {@soundRadiusBonus}) around {_loc}
+        wait 1 tick
+    loop {@volume} times:
+        loop all players in radius ({_radius} + {@soundRadiusBonus}) around {_loc}:
+            play sound "entity.warden.sonic_boom" with volume 2 at pitch 0.68 to loop-player
+    set {_damaged::*} to {_p}
+    loop {_radius} * {@explosionQuality} times:
+        set {_currRadius} to loop-iteration / {@explosionQuality}
+        circle({_currRadius}, {_loc}, y-location of {_loc}, dust_color_transition, dustTransition(light blue, white, 0.7), loop-iteration * 24)
+        if loop-iteration is evenly divisible by {@explosionQuality} * 2:
+            loop all entities in radius {_radius} around {_loc}:
+                if:
+                    loop-entity's y coordinate >= {_loc}'s y coordinate - 2
+                    loop-entity's y coordinate < {_loc}'s y coordinate + 1
+                    distance between loop-entity and {_loc} <= {_currRadius} + 1
+                    distance between loop-entity and {_loc} > {_currRadius} - 1
+                    {_damaged::*} does not contain loop-entity
+                then:
+                    make {_p} damage loop-entity by {_dmg}
+                    add loop-entity to {_damaged::*}
+        if loop-iteration is evenly divisible by 2:
+            wait 1 tick
+
+local function ShowBomb(p: player, loc: location, fuse: timespan, radius: number, dmg: number):
+    CustomBlock("seismiccharge", {_loc}, {_fuse} + 10 ticks) # This function is in another skript, if you don't have access to that, just delete this line (It won't show the texture)
+    play sound "block.anvil.place" with volume 0.1 at pitch 0.6 at {_p}
+    spawn text display at location 2 blocks above {_loc}'s location
+    set {_e} to last spawned text display
+    set billboard of {_e} to center
+    loop seconds of {_fuse} times:
+        set text of {_e} to "&c&l%seconds of {_fuse} - loop-iteration% seconds till explosion"
+        wait 1 second
+    set text of {_e} to "&b&lSeismic Charge"
+    wait 10 ticks
+    kill {_e}
